@@ -1,0 +1,23 @@
+{
+  "name": "smart-contracts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.5",
+    "@nomicfoundation/hardhat-toolbox": "^6.1.2",
+    "@types/node": "^22.19.17",
+    "ethers": "^6.12.0",
+    "hardhat": "^2.22.4",
+    "typescript": "~5.8.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
+}
