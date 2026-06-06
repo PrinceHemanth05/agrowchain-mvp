@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import AddFarmer from './pages/AddFarmer';
 import HarvestItem from './pages/HarvestItem';
 import TrackItem from './pages/TrackItem';
+import ProtectedRoute from './components/ProtectedRoute'; // 🛡️ Import the Bouncer
 
 export default function App() {
   return (
@@ -73,18 +74,27 @@ export default function App() {
         </div>
 
         {/* --- FOREGROUND UI (Navbar + Router) --- */}
-        {/* z-30 ensures your UI sits above the background. 
-            flex-grow ensures the content stretches to fill the screen properly. */}
         <div className="relative z-30 flex flex-col flex-grow">
           <Navbar /> 
           
           <main className="flex-grow flex items-center justify-center p-6">
             <Routes>
+              {/* 🟢 PUBLIC ROUTES (Open to everyone) */}
               <Route path="/" element={<Home />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/add-farmer" element={<AddFarmer />} />
-              <Route path="/harvest" element={<HarvestItem />} />
               <Route path="/track" element={<TrackItem />} />
+              
+              {/* 🟢 Registration is now fully public for evaluators to test */}
+              <Route path="/add-farmer" element={<AddFarmer />} />
+
+              {/* 🔴 PROTECTED: REGISTERED USERS ONLY */}
+              <Route path="/dashboard" element={
+                <ProtectedRoute allowedRoles={['Admin', 'Farmer', 'Distributor', 'Retailer']}>
+                  <Dashboard />
+                </ProtectedRoute>
+              } />
+
+              {/* 🟢 UNLOCKED FOR PRESENTATION */}
+              <Route path="/harvest" element={<HarvestItem />} />
             </Routes>
           </main>
         </div>

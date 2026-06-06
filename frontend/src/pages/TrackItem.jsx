@@ -35,7 +35,10 @@ function TrackItem() {
     try {
       const response = await fetch('http://localhost:5000/api/update-status', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-api-key': 'agrowchain-secure-mvp-key-2026' // 🛡️ API Key Added for status updates
+        },
         body: JSON.stringify({ batchId: batchData.batchId, newStatus: newStatus })
       });
       const data = await response.json();
@@ -111,7 +114,6 @@ function TrackItem() {
             <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '1.5rem', border: '1px solid #eaeaea', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <h4 style={{ color: '#2c3e50', marginTop: 0, width: '100%', borderBottom: '1px solid #f0f0f0', paddingBottom: '0.5rem', marginBottom: '1.5rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>📱 QR Code</h4>
               
-              {/* UPDATED: QR Code now includes the Farmer's Hash Key! */}
               <QRCodeSVG 
                 value={JSON.stringify({ 
                   id: batchData.batchId, 

@@ -19,7 +19,8 @@ app.use(express.json());
 // --- INITIALIZATIONS (WITH DEFENSIVE CHECKS) ---
 // .trim() removes any hidden spaces or newlines that might cause crashes
 const rawPk = process.env.PRIVATE_KEY ? process.env.PRIVATE_KEY.trim() : "";
-const rawAddress = ContractData.address ? ContractData.address.trim() : "";
+// Now it reads the freshly auto-deployed address directly from the .env file!
+const rawAddress = process.env.CONTRACT_ADDRESS ? process.env.CONTRACT_ADDRESS.trim() : "";
 const rawRpc = process.env.RPC_URL ? process.env.RPC_URL.trim() : "http://127.0.0.1:8545";
 
 // 1. Check the Private Key
@@ -31,8 +32,8 @@ if (!rawPk.startsWith('0x') || rawPk.length !== 66) {
 
 // 2. Check the Contract Address
 if (!rawAddress.startsWith('0x') || rawAddress.length !== 42) {
-    console.error("🚨 FATAL ERROR: Invalid contract address in config/address.json.");
-    console.error(`Your address.json currently reads: "${rawAddress}"`);
+    console.error("🚨 FATAL ERROR: Invalid contract address.");
+    console.error(`Your address currently reads: "${rawAddress}"`);
     process.exit(1); // Stop the server
 }
 
@@ -41,13 +42,28 @@ const provider = new ethers.JsonRpcProvider(rawRpc);
 const wallet = new ethers.Wallet(rawPk, provider);
 const contract = new ethers.Contract(rawAddress, AgrowchainArtifact.abi, wallet);
 
-// 🛠️ FIX: Initialize the missing Supabase Client variable here
+// Initialize Supabase & Gemini
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // ==========================================
-// 📊 PHASE 1 & 2: ANALYTICS & AI ROUTES
+// 🛡️ API SECURITY MIDDLEWARE
+// ==========================================
+const requireApiKey = (req, res, next) => {
+    const clientKey = req.headers['x-api-key'];
+    const serverKey = process.env.FRONTEND_API_KEY;
+
+    if (!clientKey || clientKey !== serverKey) {
+        console.warn("🚨 BLOCKED: Unauthorized API access attempt.");
+        return res.status(403).json({ success: false, error: "Unauthorized: Invalid or missing API Key." });
+    }
+    
+    // If the key matches, allow them to proceed!
+    next();
+};
+
+// ==========================================
+// 📊 PHASE 1 & 2: ANALYTICS & AI ROUTES (Public Reads)
 // ==========================================
 
 app.get('/api/analytics', async (req, res) => {
@@ -128,7 +144,6 @@ app.get('/api/accounts', async (req, res) => {
         const accountsData = await Promise.all(signers.map(async (signer) => {
             const addr = signer.address;
             
-            // 🔥 UPDATED: Now queries the V2 trustScore instead of the legacy balance
             const [isRegistered, score] = await Promise.all([
                 contract.farmers(addr),
                 contract.trustScore(addr)
@@ -148,7 +163,6 @@ app.get('/api/accounts', async (req, res) => {
     }
 });
 
-// 🔥 UPDATED: Replaced legacy balance fetcher with V2 Reputation Tracker
 app.get('/api/trust-score/:address', async (req, res) => {
     try {
         const score = await contract.trustScore(req.params.address);
@@ -158,7 +172,8 @@ app.get('/api/trust-score/:address', async (req, res) => {
     }
 });
 
-app.post('/api/add-farmer', async (req, res) => {
+// 🔒 PROTECTED WRITES
+app.post('/api/add-farmer', requireApiKey, async (req, res) => {
     try {
         const transaction = await contract.addFarmer(req.body.farmerAddress);
         const receipt = await transaction.wait();
@@ -168,7 +183,7 @@ app.post('/api/add-farmer', async (req, res) => {
     }
 });
 
-app.post('/api/add-distributor', async (req, res) => {
+app.post('/api/add-distributor', requireApiKey, async (req, res) => {
     try {
         const transaction = await contract.addDistributor(req.body.address);
         const receipt = await transaction.wait();
@@ -178,7 +193,7 @@ app.post('/api/add-distributor', async (req, res) => {
     }
 });
 
-app.post('/api/add-retailer', async (req, res) => {
+app.post('/api/add-retailer', requireApiKey, async (req, res) => {
     try {
         const transaction = await contract.addRetailer(req.body.address);
         const receipt = await transaction.wait();
@@ -223,7 +238,8 @@ app.get('/api/store/products', async (req, res) => {
 // 📦 CORE SUPPLY CHAIN ROUTES
 // ==========================================
 
-app.post('/api/add-batch', async (req, res) => {
+// 🔒 PROTECTED WRITES
+app.post('/api/add-batch', requireApiKey, async (req, res) => {
     try {
         const { cropName, origin, quality, price, farmerAddress } = req.body;
         if (!farmerAddress) return res.status(400).json({ success: false, error: "Farmer address required" });
@@ -285,7 +301,8 @@ app.get('/api/batch/:id', async (req, res) => {
     }
 });
 
-app.post('/api/update-status', async (req, res) => {
+// 🔒 PROTECTED WRITES
+app.post('/api/update-status', requireApiKey, async (req, res) => {
     try {
         const { batchId, newStatus } = req.body;
         
@@ -305,7 +322,7 @@ app.post('/api/update-status', async (req, res) => {
     }
 });
 
-app.post('/api/sync-harvest', async (req, res) => {
+app.post('/api/sync-harvest', requireApiKey, async (req, res) => {
     try {
         const { batchId, farmerAddress, cropName, origin, price, quality, txHash } = req.body;
         
@@ -334,18 +351,17 @@ app.post('/api/sync-harvest', async (req, res) => {
 // 👥 NETWORK ADMIN - USER REGISTRATION
 // ==========================================
 
-app.post('/api/add-user', async (req, res) => {
+// 🔒 PROTECTED WRITES
+app.post('/api/add-user', requireApiKey, async (req, res) => {
     try {
         const { walletAddress, name, phone, cities, role } = req.body;
 
-        // 1. Basic validation
         if (!walletAddress || !name || !phone || !cities) {
             return res.status(400).json({ error: 'All fields are required.' });
         }
 
         console.log(`Checking if Hash Key exists in Database: ${walletAddress}`);
 
-        // 2. 🛡️ DUPLICATE CHECK: Look for this Hash Key in Supabase
         const { data: existingUser, error: searchError } = await supabase
             .from('users')
             .select('wallet_address, name, role')
@@ -358,7 +374,6 @@ app.post('/api/add-user', async (req, res) => {
             });
         }
 
-        // 3. ⛓️ WEB3 SYNC: Authorize the wallet on the Smart Contract first!
         console.log(`Authorizing ${walletAddress} as ${role} on the Blockchain...`);
         try {
             let tx;
@@ -371,7 +386,7 @@ app.post('/api/add-user', async (req, res) => {
             }
             
             if (tx) {
-                await tx.wait(); // Wait for the blockchain to mine the transaction
+                await tx.wait(); 
                 console.log("✅ Blockchain authorization successful!");
             }
         } catch (bcError) {
@@ -379,7 +394,6 @@ app.post('/api/add-user', async (req, res) => {
             return res.status(400).json({ error: `Blockchain rejected authorization: ${bcError.reason || bcError.message}` });
         }
 
-        // 4. 🗄️ WEB2 SYNC: Save the metadata to Supabase
         const { error: dbError } = await supabase
             .from('users')
             .insert([{ 

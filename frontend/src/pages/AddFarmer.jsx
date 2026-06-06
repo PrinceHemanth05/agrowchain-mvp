@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useWeb3 } from '../context/Web3Context';
 
 export default function AddFarmer() {
-  // Pull the connected hash key (walletAddress) from MetaMask
-  const { walletAddress } = useWeb3();
+  const { walletAddress, refreshRole } = useWeb3();
   
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   
-  // Set the initial state. If a wallet is already connected, it auto-fills immediately!
   const [formData, setFormData] = useState({
     walletAddress: walletAddress || '', 
     name: '',
@@ -17,7 +15,6 @@ export default function AddFarmer() {
     role: 'Farmer'
   });
 
-  // This watches MetaMask. If the user changes their account, the form updates automatically.
   useEffect(() => {
     if (walletAddress) {
       setFormData((prevData) => ({
@@ -39,7 +36,10 @@ export default function AddFarmer() {
     try {
       const response = await fetch('http://localhost:5000/api/add-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-api-key': 'agrowchain-secure-mvp-key-2026' // 🛡️ API Key Added
+        },
         body: JSON.stringify(formData)
       });
 
@@ -51,7 +51,11 @@ export default function AddFarmer() {
 
       setMessage(`Successfully registered ${formData.name} as a ${formData.role}!`);
       
-      // Reset form, but keep the connected wallet address intact
+      // ⚡ INSTANT UI UPDATE: Tell the Navbar to check the blockchain again!
+      if (refreshRole) {
+        await refreshRole();
+      }
+      
       setFormData({ 
         walletAddress: walletAddress || '', 
         name: '', 
@@ -119,7 +123,6 @@ export default function AddFarmer() {
             />
           </div>
 
-          {/* Hash Key Field - Now Auto-Populated! */}
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">Hash Key (Wallet Address)</label>
             <input 

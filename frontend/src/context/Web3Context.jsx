@@ -8,21 +8,25 @@ const Web3Context = createContext();
 export const Web3Provider = ({ children }) => {
   const [walletAddress, setWalletAddress] = useState("");
   const [contract, setContract] = useState(null);
-  
-  // State to hold the user's blockchain role
   const [userRole, setUserRole] = useState("Guest");
 
   useEffect(() => {
     checkWalletAndConnectContract();
     
     if (window.ethereum) {
+      // Listen for account changes
       window.ethereum.on('accountsChanged', (accounts) => {
         setWalletAddress(accounts.length > 0 ? accounts[0] : "");
         if (accounts.length > 0) {
-          checkWalletAndConnectContract(); // Re-check role when account changes
+          checkWalletAndConnectContract(); 
         } else {
           setUserRole("Guest");
         }
+      });
+
+      // 🛡️ NEW: Listen for network changes to prevent silent errors!
+      window.ethereum.on('chainChanged', () => {
+        window.location.reload();
       });
     }
   }, []);
@@ -38,55 +42,60 @@ export const Web3Provider = ({ children }) => {
           const provider = new ethers.BrowserProvider(window.ethereum);
           const signer = await provider.getSigner();
 
-          // --- 🛡️ DEFENSIVE SHIELD AGAINST ENS ERRORS ---
-          const rawAddress = ContractData.address ? ContractData.address.trim() : "";
-          console.log("🔍 REACT THINKS THE ADDRESS IS:", `"${rawAddress}"`);
-
-          if (!rawAddress || !rawAddress.startsWith("0x")) {
-              console.error("🚨 FRONTEND FATAL ERROR: Invalid contract address in config/address.json.");
-              console.error("Please add '0x' to the beginning of your address in frontend/src/config/address.json!");
-              return; // Stop execution here to prevent the ENS crash
+          // 🛡️ NEW: Ensure MetaMask is actually connected to Localhost Hardhat!
+          const network = await provider.getNetwork();
+          if (network.chainId !== 31337n && network.chainId !== 1337n) {
+            console.error("🚨 WRONG NETWORK! Please switch MetaMask to Localhost 8545.");
+            alert("Please switch your MetaMask network to Localhost 8545!");
           }
-          // ----------------------------------------------
+
+          const rawAddress = ContractData.address ? ContractData.address.trim() : "";
+          if (!rawAddress || !rawAddress.startsWith("0x")) {
+              console.error("Invalid contract address in config/address.json.");
+              return; 
+          }
 
           const agrowContract = new ethers.Contract(rawAddress, AgrowchainArtifact.abi, signer);
           setContract(agrowContract);
 
-          // Query the smart contract to determine the role
-          try {
-            const isFarmer = await agrowContract.farmers(currentAddress);
-            if (isFarmer) {
-              setUserRole("Farmer");
-              return;
-            }
-            
-            const isDistributor = await agrowContract.distributors(currentAddress);
-            if (isDistributor) {
-              setUserRole("Distributor");
-              return;
-            }
-
-            const isRetailer = await agrowContract.retailers(currentAddress);
-            if (isRetailer) {
-              setUserRole("Retailer");
-              return;
-            }
-
-            // Optional: Check if admin (contract owner)
-            const adminAddress = await agrowContract.admin();
-            if (adminAddress.toLowerCase() === currentAddress.toLowerCase()) {
-              setUserRole("Admin");
-              return;
-            }
-
-            setUserRole("Unregistered");
-          } catch (roleError) {
-            console.error("Could not fetch roles from contract. Make sure you are on Localhost!", roleError);
-          }
+          // Call our new separated fetch function
+          await fetchRole(agrowContract, currentAddress);
         }
       } catch (error) {
         console.error("Wallet check failed:", error);
       }
+    }
+  };
+
+  // 🛠️ NEW: Separated role fetching logic so we can call it on demand
+  const fetchRole = async (agrowContract, currentAddress) => {
+    try {
+      const isFarmer = await agrowContract.farmers(currentAddress);
+      if (isFarmer) return setUserRole("Farmer");
+      
+      const isDistributor = await agrowContract.distributors(currentAddress);
+      if (isDistributor) return setUserRole("Distributor");
+
+      const isRetailer = await agrowContract.retailers(currentAddress);
+      if (isRetailer) return setUserRole("Retailer");
+
+      const adminAddress = await agrowContract.admin();
+      if (adminAddress.toLowerCase() === currentAddress.toLowerCase()) {
+        return setUserRole("Admin");
+      }
+
+      setUserRole("Unregistered");
+    } catch (roleError) {
+      console.error("Could not fetch roles from contract.", roleError);
+    }
+  };
+
+  // ⚡ NEW: A manual trigger to force React to update the state immediately
+  const refreshRole = async () => {
+    if (contract && walletAddress) {
+      await fetchRole(contract, walletAddress);
+    } else {
+      checkWalletAndConnectContract();
     }
   };
 
@@ -100,7 +109,8 @@ export const Web3Provider = ({ children }) => {
   };
 
   return (
-    <Web3Context.Provider value={{ walletAddress, connectWallet, contract, userRole }}>
+    // Make sure refreshRole is exported here!
+    <Web3Context.Provider value={{ walletAddress, connectWallet, contract, userRole, refreshRole }}>
       {children}
     </Web3Context.Provider>
   );

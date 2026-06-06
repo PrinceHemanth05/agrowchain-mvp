@@ -31,6 +31,7 @@ contract Agrowchain {
     event BatchStatusUpdated(uint256 id, string status);
     event FundsLockedInEscrow(uint256 id, address retailer, uint256 amount);
     event DeliveryCompleted(uint256 id, address farmer, uint256 payout, uint256 newTrustScore);
+    event RoleRevoked(address account, string role); // NEW: Track when someone is fired
 
     constructor() {
         admin = msg.sender;
@@ -41,10 +42,24 @@ contract Agrowchain {
         _;
     }
 
-    // Role Registration
+    // --- 🟢 ADD ROLES ---
     function addFarmer(address _farmer) public onlyAdmin { farmers[_farmer] = true; }
     function addDistributor(address _distributor) public onlyAdmin { distributors[_distributor] = true; }
     function addRetailer(address _retailer) public onlyAdmin { retailers[_retailer] = true; }
+
+    // --- 🔴 REMOVE ROLES (Security Patch 1) ---
+    function removeFarmer(address _farmer) public onlyAdmin { 
+        farmers[_farmer] = false; 
+        emit RoleRevoked(_farmer, "Farmer");
+    }
+    function removeDistributor(address _distributor) public onlyAdmin { 
+        distributors[_distributor] = false; 
+        emit RoleRevoked(_distributor, "Distributor");
+    }
+    function removeRetailer(address _retailer) public onlyAdmin { 
+        retailers[_retailer] = false; 
+        emit RoleRevoked(_retailer, "Retailer");
+    }
 
     function createBatch(string memory _cropName, string memory _origin, string memory _quality, uint256 _price, string memory _imageHash) public {
         require(farmers[msg.sender], "Only registered farmers can create batches");
@@ -77,7 +92,15 @@ contract Agrowchain {
         Batch storage batch = batches[_id];
         require(batch.isFunded, "Cannot transport unfunded batches");
 
-        batch.distributor = payable(msg.sender);
+        // --- 🛡️ ANTI-HIJACKING LOCK (Security Patch 2) ---
+        if (batch.distributor == address(0)) {
+            // If the batch has no distributor yet, the first one to update it claims it!
+            batch.distributor = payable(msg.sender);
+        } else {
+            // If it is already claimed, ONLY the original distributor can update it.
+            require(msg.sender == batch.distributor, "Batch already claimed by another distributor");
+        }
+
         batch.status = _newStatus;
         emit BatchStatusUpdated(_id, _newStatus);
     }

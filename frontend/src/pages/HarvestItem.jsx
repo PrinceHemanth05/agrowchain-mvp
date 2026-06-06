@@ -30,10 +30,13 @@ function HarvestItem() {
       const newBatchId = await contract.batchCount();
       const batchIdStr = newBatchId.toString();
 
-      // Sync to Supabase
+      // Sync to Supabase with the 🛡️ Secret Handshake!
       const syncResponse = await fetch('http://localhost:5000/api/sync-harvest', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-api-key': 'agrowchain-secure-mvp-key-2026' // Required by your backend middleware
+        },
         body: JSON.stringify({
           batchId: batchIdStr,
           farmerAddress: walletAddress,
@@ -45,7 +48,7 @@ function HarvestItem() {
         })
       });
 
-      if (!syncResponse.ok) throw new Error("Database failed to sync.");
+      if (!syncResponse.ok) throw new Error("Database failed to sync. Check API Key.");
       const syncData = await syncResponse.json();
       if (!syncData.success) throw new Error("Database sync error.");
 
