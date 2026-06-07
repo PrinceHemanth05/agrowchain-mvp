@@ -420,4 +420,56 @@ app.post('/api/add-user', requireApiKey, async (req, res) => {
     }
 });
 
+// 🔒 PROTECTED WRITE: Revoke User Access
+app.post('/api/remove-user', requireApiKey, async (req, res) => {
+    try {
+        const { walletAddress, role } = req.body;
+
+        if (!walletAddress || !role) {
+            return res.status(400).json({ error: 'Wallet address and role are required.' });
+        }
+
+        console.log(`Revoking ${role} access for ${walletAddress} on the Blockchain...`);
+        
+        // 1. UPDATE THE SOURCE OF TRUTH (Blockchain)
+        try {
+            let tx;
+            if (role === 'Farmer') {
+                tx = await contract.removeFarmer(walletAddress);
+            } else if (role === 'Distributor') {
+                tx = await contract.removeDistributor(walletAddress);
+            } else if (role === 'Retailer') {
+                tx = await contract.removeRetailer(walletAddress);
+            }
+            
+            if (tx) {
+                await tx.wait(); 
+                console.log("✅ Blockchain revocation successful!");
+            }
+        } catch (bcError) {
+            console.error("Blockchain Error:", bcError);
+            return res.status(400).json({ error: `Blockchain rejected revocation: ${bcError.reason || bcError.message}` });
+        }
+
+        // 2. UPDATE THE METADATA (Supabase)
+        const { error: dbError } = await supabase
+            .from('users')
+            .delete()
+            .eq('wallet_address', walletAddress);
+
+        if (dbError) {
+            console.error("Supabase Delete Error:", dbError);
+            // Note: In a production system, if SQL fails but Blockchain succeeds, 
+            // you'd need a dead-letter queue or retry mechanism here.
+            return res.status(500).json({ error: 'Removed from blockchain, but database deletion failed.' });
+        }
+
+        res.status(200).json({ message: 'User successfully wiped from entire system.' });
+
+    } catch (error) {
+        console.error("Error removing user:", error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 app.listen(PORT, () => console.log(`Server is running on http://localhost:${PORT}`));

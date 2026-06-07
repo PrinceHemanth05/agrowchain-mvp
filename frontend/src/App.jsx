@@ -8,10 +8,14 @@ import AddFarmer from './pages/AddFarmer';
 import HarvestItem from './pages/HarvestItem';
 import TrackItem from './pages/TrackItem';
 import ProtectedRoute from './components/ProtectedRoute'; // 🛡️ Import the Bouncer
+import CustomCursor from './components/CustomCursor'; // ✨ Import the new Aura Cursor
 
 export default function App() {
   return (
     <BrowserRouter>
+      {/* ✨ GLOBAL CUSTOM CURSOR */}
+      <CustomCursor />
+
       {/* GLOBAL BACKGROUND WRAPPER */}
       <div className="relative min-h-screen flex flex-col bg-black overflow-hidden">
         

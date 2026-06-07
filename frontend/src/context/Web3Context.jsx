@@ -42,7 +42,7 @@ export const Web3Provider = ({ children }) => {
           const provider = new ethers.BrowserProvider(window.ethereum);
           const signer = await provider.getSigner();
 
-          // 🛡️ NEW: Ensure MetaMask is actually connected to Localhost Hardhat!
+          // 🛡️ Ensure MetaMask is actually connected to Localhost Hardhat
           const network = await provider.getNetwork();
           if (network.chainId !== 31337n && network.chainId !== 1337n) {
             console.error("🚨 WRONG NETWORK! Please switch MetaMask to Localhost 8545.");
@@ -58,7 +58,7 @@ export const Web3Provider = ({ children }) => {
           const agrowContract = new ethers.Contract(rawAddress, AgrowchainArtifact.abi, signer);
           setContract(agrowContract);
 
-          // Call our new separated fetch function
+          // Call separated fetch function
           await fetchRole(agrowContract, currentAddress);
         }
       } catch (error) {
@@ -67,30 +67,40 @@ export const Web3Provider = ({ children }) => {
     }
   };
 
-  // 🛠️ NEW: Separated role fetching logic so we can call it on demand
+  // 🛠️ STRICT PRODUCTION ROLE FETCHING
   const fetchRole = async (agrowContract, currentAddress) => {
     try {
       const isFarmer = await agrowContract.farmers(currentAddress);
-      if (isFarmer) return setUserRole("Farmer");
+      if (isFarmer) {
+        setUserRole("Farmer");
+        return;
+      }
       
       const isDistributor = await agrowContract.distributors(currentAddress);
-      if (isDistributor) return setUserRole("Distributor");
+      if (isDistributor) {
+        setUserRole("Distributor");
+        return;
+      }
 
       const isRetailer = await agrowContract.retailers(currentAddress);
-      if (isRetailer) return setUserRole("Retailer");
+      if (isRetailer) {
+        setUserRole("Retailer");
+        return;
+      }
 
       const adminAddress = await agrowContract.admin();
       if (adminAddress.toLowerCase() === currentAddress.toLowerCase()) {
-        return setUserRole("Admin");
+        setUserRole("Admin");
+        return;
       }
 
       setUserRole("Unregistered");
     } catch (roleError) {
-      console.error("Could not fetch roles from contract.", roleError);
+      console.error("Strict Web3 Error: Could not fetch roles from contract.", roleError);
     }
   };
 
-  // ⚡ NEW: A manual trigger to force React to update the state immediately
+  // ⚡ Manual trigger to force React to update the state immediately
   const refreshRole = async () => {
     if (contract && walletAddress) {
       await fetchRole(contract, walletAddress);
@@ -109,7 +119,6 @@ export const Web3Provider = ({ children }) => {
   };
 
   return (
-    // Make sure refreshRole is exported here!
     <Web3Context.Provider value={{ walletAddress, connectWallet, contract, userRole, refreshRole }}>
       {children}
     </Web3Context.Provider>
