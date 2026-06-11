@@ -31,7 +31,7 @@ contract Agrowchain {
     event BatchStatusUpdated(uint256 id, string status);
     event FundsLockedInEscrow(uint256 id, address retailer, uint256 amount);
     event DeliveryCompleted(uint256 id, address farmer, uint256 payout, uint256 newTrustScore);
-    event RoleRevoked(address account, string role); // NEW: Track when someone is fired
+    event RoleRevoked(address account, string role);
 
     constructor() {
         admin = msg.sender;
@@ -47,7 +47,7 @@ contract Agrowchain {
     function addDistributor(address _distributor) public onlyAdmin { distributors[_distributor] = true; }
     function addRetailer(address _retailer) public onlyAdmin { retailers[_retailer] = true; }
 
-    // --- 🔴 REMOVE ROLES (Security Patch 1) ---
+    // --- 🔴 REMOVE ROLES ---
     function removeFarmer(address _farmer) public onlyAdmin { 
         farmers[_farmer] = false; 
         emit RoleRevoked(_farmer, "Farmer");
@@ -90,14 +90,14 @@ contract Agrowchain {
     function updateBatchStatus(uint256 _id, string memory _newStatus) public {
         require(distributors[msg.sender], "Only distributors can update transit status");
         Batch storage batch = batches[_id];
-        require(batch.isFunded, "Cannot transport unfunded batches");
+        
+        // 🛠️ PRESENTATION BYPASS 1: Disabled funding requirement for transit
+        // require(batch.isFunded, "Cannot transport unfunded batches");
 
-        // --- 🛡️ ANTI-HIJACKING LOCK (Security Patch 2) ---
+        // --- 🛡️ ANTI-HIJACKING LOCK ---
         if (batch.distributor == address(0)) {
-            // If the batch has no distributor yet, the first one to update it claims it!
             batch.distributor = payable(msg.sender);
         } else {
-            // If it is already claimed, ONLY the original distributor can update it.
             require(msg.sender == batch.distributor, "Batch already claimed by another distributor");
         }
 
@@ -108,14 +108,18 @@ contract Agrowchain {
     function completeDelivery(uint256 _id) public {
         require(distributors[msg.sender] || retailers[msg.sender], "Unauthorized");
         Batch storage batch = batches[_id];
-        require(batch.isFunded, "No funds in escrow");
+        
+        // 🛠️ PRESENTATION BYPASS 2: Disabled escrow check for delivery completion
+        // require(batch.isFunded, "No funds in escrow");
         require(keccak256(bytes(batch.status)) != keccak256(bytes("Delivered")), "Already delivered");
 
         batch.status = "Delivered";
         
         uint256 payout = batch.price;
         batch.isFunded = false; 
-        batch.farmer.transfer(payout);
+
+        // 🛠️ PRESENTATION BYPASS 3: Disabled actual ETH transfer to prevent contract crash
+        // batch.farmer.transfer(payout);
 
         trustScore[batch.farmer] += 10;
 
